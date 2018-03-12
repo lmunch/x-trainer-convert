@@ -9,5 +9,6 @@ Garmin, Endomondo and more.
 
 Note: When the time is stopped during rest periods in between intervals
 nothing is logged. To compensate for for this dummy rest data is inserted. The
-dummy rest data is 130BPM, 15KM/t, 100W and 70RPM. This can cause a slightly
-lower training impulse score than the actual one.
+dummy rest data is 130BPM, 15KM/t, 100W and 70RPM. The heart rate is assumed
+to drop 20 beats per minute while resting until reaching 130. This can cause a
+slightly different training impulse score than the actual one.

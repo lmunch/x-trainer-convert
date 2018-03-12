@@ -3,7 +3,3 @@
 Features:
 
   - initial version
-
-Issues:
-
-  - distance is reset per lap, looks very wierd in Endomondo

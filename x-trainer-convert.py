@@ -34,6 +34,9 @@ schemalocation = "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2 " \
                  "http://www.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd"
 
 
+distance = 0.0
+
+
 def add_lap_extension(node, lap):
     NS3 = "{" + namespaces['ns3'] + "}"
     extnode = etree.SubElement(node, "Extensions")
@@ -61,6 +64,7 @@ def add_trackpoint_extension(node, tp):
 
 
 def add_trackpoints(node, lap):
+    global distance
     track = etree.SubElement(node, "Track")
     for tp in lap:
         trackpoint = etree.SubElement(track, "Trackpoint")
@@ -68,8 +72,10 @@ def add_trackpoints(node, lap):
             str((lap.TimeUTC(tp['time'])))
         etree.SubElement(trackpoint, "AltitudeMeters").text = \
             "{0:.4f}".format(tp['altitude'])
+
+        distance += tp['distance']
         etree.SubElement(trackpoint, "DistanceMeters").text = \
-            "{0:.4f}".format(tp['distance'])
+            "{0:.4f}".format(distance)
 
         if tp['pulse']:
             hrnode = etree.SubElement(trackpoint, "HeartRateBpm")
@@ -138,6 +144,8 @@ def add_author(node):
 
 
 def write_xml(laps):
+    global distance
+    distance = 0.0
     attrib = {"{" + xsi + "}schemaLocation": schemalocation}
     root = etree.Element("TrainingCenterDatabase",
                          attrib=attrib,
@@ -232,12 +240,11 @@ class Lap(object):
         altitude = distance * math.sin(math.atan(value['climb%'] / 1000.0))
         if self._data:
             value['time'] = onesec + self._data[-1]['time']
-            value['distance'] = distance + self._data[-1]['distance']
             value['altitude'] = altitude + self._data[-1]['altitude']
         else:
             value['time'] = self._starttime
-            value['distance'] = distance
             value['altitude'] = self._startaltitude
+        value['distance'] = distance
         self._data.append(value)
 
     def RestSample(self, endtime, pulse):
@@ -246,14 +253,15 @@ class Lap(object):
         while self.EndTime() <= endtime:
             sample = {'pulse': int(pulse), 'rpm': 70, 'watt': 100,
                       'climb%': 0, 'km/t': 15}
-            pulse = pulse-0.5 if pulse > 130 else 130
+            # Assume heart rate drop 20 beats per minute while resting
+            pulse = pulse-1/3 if pulse > 130 else 130
             self.XTrainerSample(sample)
 
     def TotalTimeSeconds(self):
         return (self.EndTime() - self.StartTime()).total_seconds()
 
     def DistanceMeters(self):
-        return self._data[-1]['distance']
+        return sum(d['distance'] for d in self._data)
 
     def AltitudeMeters(self):
         return self._data[-1]['altitude']
