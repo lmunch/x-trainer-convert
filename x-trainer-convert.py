@@ -82,6 +82,8 @@ def add_trackpoints(node, lap):
             etree.SubElement(hrnode, "Value").text = \
                 "{}".format(tp['pulse'])
 
+        etree.SubElement(trackpoint, "Cadence").text = \
+            "{:.0f}".format(tp['rpm'])
         add_trackpoint_extension(trackpoint, tp)
 
 
@@ -105,7 +107,8 @@ def add_lap(node, lap):
         etree.SubElement(hrnode, "Value").text = \
             "{}".format(lap.MaximumHeartRateBpm())
 
-    etree.SubElement(lapnode, "Intensity").text = "Active"
+    etree.SubElement(lapnode, "Intensity").text = \
+        lap.Intensity()
     etree.SubElement(lapnode, "Cadence").text = \
         "{:.0f}".format(lap.AvgCadence())
     etree.SubElement(lapnode, "TriggerMethod").text = "Manual"
@@ -193,9 +196,10 @@ def row_is_totals(row):
 
 
 class Lap(object):
-    def __init__(self, starttime, altitude=0):
+    def __init__(self, starttime, altitude=0, active=True):
         self._starttime = starttime
         self._startaltitude = altitude
+        self._intensity = "Active" if active else "Resting"
         self._data = []
 
     def __len__(self):
@@ -211,6 +215,9 @@ class Lap(object):
             return self._data[self._iteridx]
         except IndexError:
             raise StopIteration
+
+    def Intensity(self):
+        return self._intensity
 
     def TimeUTC(self, dt):
         dateFormat = "%Y-%m-%dT%H:%M:%S.000Z"
@@ -387,7 +394,7 @@ if __name__ == "__main__":
         restlaps = []
         for l1, l2 in pairwise(laps):
             restlap = Lap(l1.EndTime() + datetime.timedelta(seconds=1),
-                          l1.AltitudeMeters())
+                          l1.AltitudeMeters(), False)
             restlap.RestSample(l2.StartTime() - datetime.timedelta(seconds=1),
                                l1.HeartRateBpm())
             restlaps.append(restlap)
