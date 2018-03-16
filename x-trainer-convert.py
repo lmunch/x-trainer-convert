@@ -11,9 +11,11 @@ import datetime
 import itertools
 import math
 import re
+import sys
 from collections import deque
 from lxml import etree
 from pytz import UTC
+from garmin_uploader.workflow import Workflow
 
 version_major = 0
 version_minor = 0
@@ -164,6 +166,7 @@ def write_xml(laps):
                                                filename))
     tree.write(filename, encoding='utf-8',
                xml_declaration=True, method="xml", pretty_print=True)
+    return filename
 
 
 stat_keys = ['time', 'pulse', 'rpm', 'watt', 'climb%', 'km/t']
@@ -352,7 +355,17 @@ def parse_arguments():
                         help='CSV files to convert')
     parser.add_argument("-v", "--verbose", default=False, action="store_true",
                         help="verbose output")
-    return parser.parse_args()
+    parser.add_argument("--upload", default=False, action="store_true",
+                        help="upload to Garmin Connect")
+    parser.add_argument("-u", "--username", default=None,
+                        help="Garmin Connect user login")
+    parser.add_argument("-p", "--password", default=None,
+                        help="Garmin Connect user password")
+    args = parser.parse_args()
+    if args.upload and (args.username is None or args.password is None):
+        print("Username and password is required for uploading to Garmin.")
+        sys.exit(1)
+    return args
 
 
 if __name__ == "__main__":
@@ -377,8 +390,8 @@ if __name__ == "__main__":
         if not lap:
             lap = Lap(starttime)
 
-        with open(f, newline='') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',')
+        with open(f, newline="") as csvfile:
+            reader = csv.reader(csvfile, delimiter=",")
             for row in reader:
                 if row_is_header(row):
                     continue
@@ -397,6 +410,7 @@ if __name__ == "__main__":
     lapsplit = [0] + lapsplit + [len(laps)]
     sessions = [laps[i:j] for i, j in pairwise(lapsplit)]
 
+    tcx_files = []
     for laps in sessions:
         # Add rest laps
         restlaps = []
@@ -420,7 +434,8 @@ if __name__ == "__main__":
         for lap in laps:
             start_altitude = lap.UpdateAltitude(start_altitude)
 
-        write_xml(laps)
+        tcx_file = write_xml(laps)
+        tcx_files.append(tcx_file)
         totsec = sum([l.TotalTimeSeconds() for l in laps])
         print("active time: {}".format(datetime.timedelta(seconds=totsec)))
 
@@ -435,3 +450,11 @@ if __name__ == "__main__":
             print("max {}s watt: {:.0f}W".
                   format(i, max([l.MaximumWatts(i) for l in laps])))
         print("max speed: {}km/t".format(max([l.MaximumSpeed() for l in laps])))
+
+    if args.upload and tcx_files:
+        for tcx in tcx_files:
+            workflow = Workflow([tcx], args.username, args.password,
+                                activity_type="indoor_cycling",
+                                activity_name="X-trainer indoor cycling",
+                                verbose=5 if args.verbose else 2)
+            workflow.run()
