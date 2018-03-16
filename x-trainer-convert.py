@@ -34,9 +34,6 @@ schemalocation = "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2 " \
                  "http://www.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd"
 
 
-distance = 0.0
-
-
 def add_lap_extension(node, lap):
     NS3 = "{" + namespaces['ns3'] + "}"
     extnode = etree.SubElement(node, "Extensions")
@@ -64,7 +61,6 @@ def add_trackpoint_extension(node, tp):
 
 
 def add_trackpoints(node, lap):
-    global distance
     track = etree.SubElement(node, "Track")
     for tp in lap:
         trackpoint = etree.SubElement(track, "Trackpoint")
@@ -72,10 +68,8 @@ def add_trackpoints(node, lap):
             str((lap.TimeUTC(tp['time'])))
         etree.SubElement(trackpoint, "AltitudeMeters").text = \
             "{0:.4f}".format(tp['altitude'])
-
-        distance += tp['distance']
         etree.SubElement(trackpoint, "DistanceMeters").text = \
-            "{0:.4f}".format(distance)
+            "{0:.4f}".format(tp['distance'])
 
         if tp['pulse']:
             hrnode = etree.SubElement(trackpoint, "HeartRateBpm")
@@ -147,8 +141,6 @@ def add_author(node):
 
 
 def write_xml(laps):
-    global distance
-    distance = 0.0
     attrib = {"{" + xsi + "}schemaLocation": schemalocation}
     root = etree.Element("TrainingCenterDatabase",
                          attrib=attrib,
@@ -196,9 +188,8 @@ def row_is_totals(row):
 
 
 class Lap(object):
-    def __init__(self, starttime, altitude=0, active=True):
+    def __init__(self, starttime, active=True):
         self._starttime = starttime
-        self._startaltitude = altitude
         self._intensity = "Active" if active else "Resting"
         self._data = []
 
@@ -215,6 +206,20 @@ class Lap(object):
             return self._data[self._iteridx]
         except IndexError:
             raise StopIteration
+
+    def _update_from_delta(self, start, key):
+        if not self._data:
+            return 0.0
+        self._data[0][key] = start
+        for i, d in enumerate(self._data[1:]):
+            d[key] = self._data[i][key] + d[key + '_delta']
+        return self._data[-1][key]
+
+    def UpdateDistance(self, start=0.0):
+        return self._update_from_delta(start, 'distance')
+
+    def UpdateAltitude(self, start=0.0):
+        return self._update_from_delta(start, 'altitude')
 
     def Intensity(self):
         return self._intensity
@@ -242,16 +247,15 @@ class Lap(object):
           * Exactly one sample per second
           * Hill grade (climb%) is 10*grade
         """
-        onesec = datetime.timedelta(seconds=1)
-        distance = value['km/t'] / 3.6
-        altitude = distance * math.sin(math.atan(value['climb%'] / 1000.0))
         if self._data:
+            onesec = datetime.timedelta(seconds=1)
             value['time'] = onesec + self._data[-1]['time']
-            value['altitude'] = altitude + self._data[-1]['altitude']
         else:
             value['time'] = self._starttime
-            value['altitude'] = self._startaltitude
-        value['distance'] = distance
+        distance = value['km/t'] / 3.6
+        altitude = distance * math.sin(math.atan(value['climb%'] / 1000.0))
+        value['distance_delta'] = distance
+        value['altitude_delta'] = altitude
         self._data.append(value)
 
     def RestSample(self, endtime, pulse):
@@ -264,17 +268,26 @@ class Lap(object):
             pulse = pulse-1/3 if pulse > 130 else 130
             self.XTrainerSample(sample)
 
+    def Sum(self, idx):
+        return sum([d[idx] for d in self._data])
+
+    def Avg(self, idx):
+        return sum([d[idx] for d in self._data])/float(len(self._data))
+
     def TotalTimeSeconds(self):
         return (self.EndTime() - self.StartTime()).total_seconds()
 
     def DistanceMeters(self):
-        return sum(d['distance'] for d in self._data)
-
-    def AltitudeMeters(self):
-        return self._data[-1]['altitude']
+        return self.Sum('distance_delta')
 
     def HeartRateBpm(self):
         return self._data[-1]['pulse']
+
+    def Minimum(self, idx):
+        return min([d[idx] for d in self._data])
+
+    def MinimumAltitude(self):
+        return self.Minimum('altitude')
 
     def Maximum(self, idx):
         return max([d[idx] for d in self._data])
@@ -300,12 +313,6 @@ class Lap(object):
 
     def MaximumHeartRateBpm(self):
         return self.Maximum('pulse')
-
-    def Sum(self, idx):
-        return sum([d[idx] for d in self._data])
-
-    def Avg(self, idx):
-        return sum([d[idx] for d in self._data])/float(len(self._data))
 
     def AvgSpeed(self):
         return self.Avg('km/t')
@@ -362,14 +369,13 @@ if __name__ == "__main__":
         starttime = datetime.datetime(int(m.group(1)), int(m.group(2)),
                                       int(m.group(3)), int(m.group(4)),
                                       int(m.group(5)))
-        startaltitude = laps[-1].AltitudeMeters() if laps else 0
 
         # Collapse close (5sec) or overlapping laps
         if laps:
             tdelta = starttime - laps[-1].EndTime()
             lap = laps.pop() if tdelta.total_seconds() < 5 else None
         if not lap:
-            lap = Lap(starttime, startaltitude)
+            lap = Lap(starttime)
 
         with open(f, newline='') as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
@@ -381,7 +387,9 @@ if __name__ == "__main__":
                 values = dict(zip(stat_keys, [int(n) for n in row]))
                 lap.XTrainerSample(values)
 
-        laps.append(lap)
+        # Use lap but only if it has data
+        if len(lap):
+            laps.append(lap)
 
     # Split into sessions (more than 20 minutes in between laps)
     lapsplit = [idx for idx, (l1, l2) in enumerate(pairwise(laps), 1)
@@ -393,13 +401,24 @@ if __name__ == "__main__":
         # Add rest laps
         restlaps = []
         for l1, l2 in pairwise(laps):
-            restlap = Lap(l1.EndTime() + datetime.timedelta(seconds=1),
-                          l1.AltitudeMeters(), False)
+            restlap = Lap(l1.EndTime() + datetime.timedelta(seconds=1), False)
             restlap.RestSample(l2.StartTime() - datetime.timedelta(seconds=1),
                                l1.HeartRateBpm())
             restlaps.append(restlap)
         for idx, restlap in enumerate(restlaps, 1):
             laps.insert(idx*2-1, restlap)
+
+        # Recalculate distance and altitude
+        start_distance = start_altitude = 0.0
+        for lap in laps:
+            start_distance = lap.UpdateDistance(start_distance)
+            start_altitude = lap.UpdateAltitude(start_altitude)
+
+        # Garmin altitude graph does not like altitudes below -500m, hence
+        # adjust altitude to have 10m as lowest point
+        start_altitude = 10.0 - min([lap.MinimumAltitude() for lap in laps])
+        for lap in laps:
+            start_altitude = lap.UpdateAltitude(start_altitude)
 
         write_xml(laps)
         totsec = sum([l.TotalTimeSeconds() for l in laps])
