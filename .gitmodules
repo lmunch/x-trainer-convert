@@ -1,0 +1,4 @@
+[submodule "garmin-uploader"]
+	path = garmin-uploader
+	url = https://github.com/lmunch/garmin-uploader.git
+	branch = master
