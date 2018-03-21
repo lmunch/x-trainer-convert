@@ -175,7 +175,7 @@ stat_keys = ['time', 'pulse', 'rpm', 'watt', 'climb%', 'km/t']
 def row_is_header(row):
     # First line
     if row[0] == "ver":
-        if row[1:] != ['4', '168', '869']:
+        if row[1] != "4":
             raise KeyError("Error: unknown version header")
         return True
     # Second line (column info)
