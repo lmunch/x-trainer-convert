@@ -362,9 +362,6 @@ def parse_arguments():
     parser.add_argument("-p", "--password", default=None,
                         help="Garmin Connect user password")
     args = parser.parse_args()
-    if args.upload and (args.username is None or args.password is None):
-        print("Username and password is required for uploading to Garmin.")
-        sys.exit(1)
     return args
 
 
@@ -453,8 +450,12 @@ if __name__ == "__main__":
 
     if args.upload and tcx_files:
         for tcx in tcx_files:
-            workflow = Workflow([tcx], args.username, args.password,
-                                activity_type="indoor_cycling",
-                                activity_name="X-trainer indoor cycling",
-                                verbose=5 if args.verbose else 2)
-            workflow.run()
+            try:
+                workflow = Workflow([tcx], args.username, args.password,
+                                    activity_type="indoor_cycling",
+                                    activity_name="X-trainer indoor cycling",
+                                    verbose=5 if args.verbose else 2)
+                workflow.run()
+            except Exception as e:
+                print("Error: {}".format(str(e)))
+                sys.exit(1)
