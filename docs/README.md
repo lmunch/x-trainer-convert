@@ -41,6 +41,11 @@ Convert indoor bike workout data from X-trainer CSV format to TCX
 
 ![Sa Calobra Example](example.png "Sa Calobra Example")
 
+# Release
+
+There is no official release yet. Please see the [ChangeLog](CHANGELOG.md) for
+details.
+
 # TODO
 
  * Windows support (might actually already work)
