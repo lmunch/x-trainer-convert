@@ -7,7 +7,7 @@ if [ ! -d venv3 ]; then
     venv3/bin/pip install pytz
     venv3/bin/pip install requests
     venv3/bin/pip install six
+    venv3/bin/pip install -I garmin-uploader==1.0.4
 fi
 
 source venv3/bin/activate
-export PYTHONPATH=garmin-uploader
