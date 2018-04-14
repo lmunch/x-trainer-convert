@@ -365,7 +365,7 @@ def parse_arguments():
     return args
 
 
-if __name__ == "__main__":
+def main():
     args = parse_arguments()
     files = sorted(set(args.files))
     file_rex = re.compile(".*tr(\d{4})(\d{2})(\d{2})(\d{2})(\d{2}).csv",
@@ -459,3 +459,7 @@ if __name__ == "__main__":
             except Exception as e:
                 print("Error: {}".format(str(e)))
                 sys.exit(1)
+
+
+if __name__ == '__main__':
+    sys.exit(main())
