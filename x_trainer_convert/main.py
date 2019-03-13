@@ -190,6 +190,10 @@ def row_is_totals(row):
     return row[0] == "tot"
 
 
+def row_is_incomplete(row):
+    return len(row) != 6
+
+
 class Lap(object):
     def __init__(self, starttime, active=True):
         self._starttime = starttime
@@ -394,6 +398,8 @@ def main():
                     continue
                 if row_is_totals(row):
                     break
+                if row_is_incomplete(row):
+                    continue
                 values = dict(zip(stat_keys, [int(n) for n in row]))
                 lap.XTrainerSample(values)
 
